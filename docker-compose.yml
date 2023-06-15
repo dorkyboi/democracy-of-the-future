@@ -1,0 +1,85 @@
+version: '3'
+services:
+   webserver:
+     image: nginx
+     container_name: webserver
+     volumes:
+        - ./:/var/www:cached
+        - ./docker/nginx/conf.d/:/etc/nginx/conf.d/
+     depends_on:
+        - app
+     networks:
+        - backend
+     restart: always
+     tty: true
+     ports:
+        - "9100:80"
+        - "9101:443"
+        - '${VITE_PORT:-5173}:${VITE_PORT:-5173}'
+     environment:
+        - http_proxy
+        - https_proxy
+        - no_proxy
+
+   mysql:
+     image: mariadb
+     container_name: mysql
+     volumes:
+         - ./.greenway-data/mariadb:/var/lib/mysql
+     restart: unless-stopped
+     tty: true
+     ports:
+         - "3308:3306"
+     environment:
+         - MARIADB_USER=${DB_USERNAME}
+         - MARIADB_DATABASE=${DB_DATABASE}
+         - MARIADB_ROOT_PASSWORD=${DB_PASSWORD}
+         - MARIADB_PASSWORD=${DB_PASSWORD}+
+         - MARIADB_ALLOW_EMPTY_PASSWORD=yes
+         - SERVICE_TAGS=dev
+         - SERVICE_NAME=${DB_HOST}
+     networks:
+         - backend
+
+   app:
+     build:
+        context: ./
+        dockerfile: ./docker/app/Dockerfile
+     image: digitalocean.com/php
+     container_name: app
+     restart: unless-stopped
+     tty: true
+     environment:
+         SERVICE_NAME: app
+         SERVICE_TAGS: dev
+     working_dir: /var/www
+     depends_on:
+         - mysql
+         - redis
+     volumes:
+         - ./:/var/www
+         - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+     networks:
+         - backend
+
+   redis:
+     image: redis
+     container_name: redis
+     restart: unless-stopped
+     volumes:
+         - ./.greenway-data/redis:/data
+     ports:
+         - "6379:6379"
+     networks:
+         - backend
+
+networks:
+  backend:
+    driver: bridge
+
+
+volumes:
+  mariadb:
+    driver: local
+  redis:
+    driver: local
